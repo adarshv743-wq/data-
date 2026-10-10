@@ -1,0 +1,11 @@
+date,region,product,product_price,ad_spend,units_sold,sales_amount
+2026-01-01,North,Widget,12.5,120,40,500
+2026-01-02,South,Gadget,20.0,90,18,360
+2026-01-03,North,Gadget,19.5,150,27,526.5
+2026-01-04,West,Widget,11.0,80,35,385
+2026-01-05,East,Widget,13.0,160,48,624
+2026-01-06,South,Gadget,21.0,70,15,315
+2026-01-07,West,Widget,10.5,110,42,441
+2026-01-08,East,Gadget,18.5,140,30,555
+2026-01-09,North,Widget,12.0,130,44,528
+2026-01-10,South,Widget,11.5,100,33,379.5

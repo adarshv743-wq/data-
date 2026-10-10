@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}DAG-EDA · History{% endblock %}
+{% block content %}
+<section class="hero compact"><p class="eyebrow">Saved work</p><h1>Analysis history</h1><p class="lead">Open a previous session to revisit its question, graphs, and candidate analyses.</p></section>
+<section class="panel">
+{% if rows %}
+<div class="table-wrap"><table><thead><tr><th>Question</th><th>Dataset</th><th>Rows</th><th>Columns</th><th>Created</th><th></th></tr></thead><tbody>
+{% for r in rows %}<tr><td>{{ r.question }}</td><td>{{ r.filename }}</td><td>{{ r.row_count }}</td><td>{{ r.column_count }}</td><td>{{ r.created_at }}</td><td><a href="{{ url_for('dashboard', session_id=r.id) }}">Open</a></td></tr>{% endfor %}
+</tbody></table></div>
+{% else %}<p>No saved sessions yet. Upload a CSV to get started.</p>{% endif %}
+</section>
+{% endblock %}

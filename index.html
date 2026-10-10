@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}DAG-EDA · Start{% endblock %}
+{% block content %}
+<section class="hero">
+  <p class="eyebrow">AI-assisted exploratory data analysis</p>
+  <h1>Turn a broad question into a clear analysis path.</h1>
+  <p class="lead">Upload a CSV, ask a question, and explore candidate analyses, dataset concepts, and interactive visualizations.</p>
+</section>
+<section class="panel">
+  <h2>Start an analysis</h2>
+  <form method="post" enctype="multipart/form-data" class="upload-form">
+    <label for="question">Your analytical question</label>
+    <textarea id="question" name="question" rows="3" placeholder="Example: What factors are associated with lower sales?" required></textarea>
+    <label for="dataset">Dataset (CSV)</label>
+    <input id="dataset" type="file" name="dataset" accept=".csv" required>
+    <p class="hint">Use a CSV with column headers. For this prototype, files are processed locally by the Flask app.</p>
+    <button type="submit">Analyze dataset</button>
+  </form>
+</section>
+<section class="panel">
+  <h2>What this prototype does</h2>
+  <div class="feature-grid">
+    <article><h3>Intent graph</h3><p>Breaks the question into candidate analysis tasks and methods.</p></article>
+    <article><h3>Knowledge graph</h3><p>Maps common domain concepts to matching dataset columns.</p></article>
+    <article><h3>Data dashboard</h3><p>Shows column quality, summary statistics, and charts.</p></article>
+  </div>
+  <p class="notice">The suggestion engine is a transparent rule-based baseline, not a full LLM. It does not infer causation from correlation.</p>
+</section>
+{% if recent %}
+<section class="panel">
+  <h2>Recent sessions</h2>
+  <ul class="recent-list">
+  {% for item in recent %}
+    <li><a href="{{ url_for('dashboard', session_id=item.id) }}">{{ item.question }}</a><span>{{ item.created_at }}</span></li>
+  {% endfor %}
+  </ul>
+</section>
+{% endif %}
+{% endblock %}

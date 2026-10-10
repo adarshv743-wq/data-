@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+{% block title %}DAG-EDA · Dashboard{% endblock %}
+{% block content %}
+<section class="hero compact">
+  <p class="eyebrow">Analysis session #{{ session.id }}</p>
+  <h1>{{ session.question }}</h1>
+  <p class="lead">{{ session.filename }} · {{ session.row_count }} rows · {{ session.column_count }} columns</p>
+</section>
+
+<section class="stats-grid">
+  <div class="stat"><span>Rows</span><strong>{{ session.summary.rows }}</strong></div>
+  <div class="stat"><span>Columns</span><strong>{{ session.summary.columns_count }}</strong></div>
+  <div class="stat"><span>Numeric fields</span><strong>{{ session.summary.numeric_columns|length }}</strong></div>
+  <div class="stat"><span>Other fields</span><strong>{{ session.summary.categorical_columns|length }}</strong></div>
+</section>
+
+<section class="panel">
+  <div class="section-heading"><div><p class="eyebrow">01 · Intent graph</p><h2>Possible analysis paths</h2></div><span class="tag">Explore the branches</span></div>
+  <p class="muted">Select a task below to view the suggested method and save it to the session history.</p>
+  <div id="intent-graph" class="graph"></div>
+  <div class="analysis-cards">
+    {% for a in session.analyses %}
+    <article class="analysis-card">
+      <div class="card-top"><span class="tag">{{ a.method }}</span><span class="priority">Priority {{ a.priority }}</span></div>
+      <h3>{{ a.title }}</h3><p>{{ a.reason }}</p>
+      <button class="secondary save-task" data-task="{{ a.title }}" data-result='{{ a|tojson|forceescape }}'>Save explored path</button>
+    </article>
+    {% endfor %}
+  </div>
+</section>
+
+<section class="panel">
+  <div class="section-heading"><div><p class="eyebrow">02 · Knowledge graph</p><h2>Concepts linked to dataset variables</h2></div></div>
+  <p class="muted">These links are inferred from column names using simple keyword matching. Review them before relying on them.</p>
+  <div id="knowledge-graph" class="graph"></div>
+  <div class="table-wrap"><table><thead><tr><th>Column</th><th>Type</th><th>Missing values</th><th>Unique values</th><th>Sample values</th></tr></thead><tbody>
+  {% for c in session.summary.columns %}
+    <tr><td>{{ c.name }}</td><td>{{ c.dtype }}</td><td>{{ c.missing }} ({{ c.missing_pct }}%)</td><td>{{ c.unique }}</td><td>{{ c.sample|join(", ") }}</td></tr>
+  {% endfor %}
+  </tbody></table></div>
+</section>
+
+<section class="panel">
+  <p class="eyebrow">03 · Interactive dashboard</p><h2>Explore the data</h2>
+  <div class="charts-grid">
+    <article class="chart-card"><h3>Numeric distributions</h3><label for="numeric-select">Choose a numeric column</label><select id="numeric-select"></select><canvas id="histogram"></canvas></article>
+    <article class="chart-card"><h3>Correlation overview</h3><canvas id="correlation-chart"></canvas><p class="hint">Correlation indicates association, not causation.</p></article>
+    <article class="chart-card"><h3>Missing values</h3><canvas id="missing-chart"></canvas></article>
+  </div>
+</section>
+
+<script>
+const intentGraph = {{ session.intent_graph|tojson }};
+const knowledgeGraph = {{ session.knowledge_graph|tojson }};
+const summary = {{ session.summary|tojson }};
+const analyses = {{ session.analyses|tojson }};
+const sessionId = {{ session.id }};
+
+function renderGraph(containerId, graph, isKnowledge) {
+  const container = document.getElementById(containerId);
+  const elements = [];
+  graph.nodes.forEach(n => elements.push({ data: { id: n.id, label: n.label, kind: n.kind } }));
+  graph.edges.forEach((e, i) => elements.push({ data: { id: 'edge' + i, source: e.source, target: e.target, label: e.label || '' } }));
+  if (typeof cytoscape === 'undefined') {
+    container.innerHTML = '<p>Graph library could not load. Use the analysis cards and table below.</p>';
+    return;
+  }
+  cytoscape({
+    container, elements,
+    style: [
+      { selector: 'node', style: { 'label': 'data(label)', 'font-size': 11, 'text-wrap': 'wrap', 'text-max-width': 110, 'text-valign': 'center', 'text-halign': 'center', 'background-color': '#dce7f5', 'color': '#18324b', 'width': 'label', 'height': 'label', 'padding': '12px', 'shape': 'round-rectangle', 'border-width': 1, 'border-color': '#8ba7c7' } },
+      { selector: 'node[kind="question"]', style: { 'background-color': '#1e456b', 'color': '#ffffff' } },
+      { selector: 'node[kind="concept"]', style: { 'background-color': '#dcefe8', 'border-color': '#7cae9c' } },
+      { selector: 'node[kind="variable"]', style: { 'background-color': '#fff0d8', 'border-color': '#d9b779' } },
+      { selector: 'node[kind="method"]', style: { 'background-color': '#eee5fa', 'border-color': '#b7a1d8' } },
+      { selector: 'edge', style: { 'width': 1.5, 'line-color': '#91a2b6', 'target-arrow-color': '#91a2b6', 'target-arrow-shape': 'triangle', 'curve-style': 'bezier', 'label': 'data(label)', 'font-size': 9, 'color': '#667085' } }
+    ],
+    layout: { name: 'breadthfirst', directed: true, padding: 30, spacingFactor: isKnowledge ? 1.1 : 1.25, animate: false }
+  });
+}
+renderGraph('intent-graph', intentGraph, false);
+renderGraph('knowledge-graph', knowledgeGraph, true);
+
+const numeric = summary.numeric_columns || [];
+const select = document.getElementById('numeric-select');
+numeric.forEach(col => { const o = document.createElement('option'); o.value = col; o.textContent = col; select.appendChild(o); });
+
+async function loadChartData() {
+  // Data values are stored only in the uploaded CSV, so charts use server-provided summary/analysis.
+  const dist = analyses.find(a => a.id === 'numeric_overview');
+  const correlations = analyses.find(a => a.id === 'correlation');
+  const quality = analyses.find(a => a.id === 'data_quality');
+  if (numeric.length && dist) {
+    // Histogram values are fetched from a JSON endpoint below.
+    const response = await fetch(`/api/session/${sessionId}/chart-data`);
+    if (response.ok) {
+      const payload = await response.json();
+      const drawHistogram = (column) => {
+        const item = payload.histograms[column] || { labels: [], values: [] };
+        if (window.histChart) window.histChart.destroy();
+        window.histChart = new Chart(document.getElementById('histogram'), {
+          type: 'bar', data: { labels: item.labels, datasets: [{ label: column, data: item.values }] },
+          options: { responsive: true, plugins: { legend: { display: false } } }
+        });
+      };
+      drawHistogram(numeric[0]);
+      select.addEventListener('change', () => drawHistogram(select.value));
+      if (payload.correlations.labels.length) {
+        new Chart(document.getElementById('correlation-chart'), {
+          type: 'bar', data: { labels: payload.correlations.labels, datasets: [{ label: 'Correlation', data: payload.correlations.values }] },
+          options: { indexAxis: 'y', scales: { x: { min: -1, max: 1 } } }
+        });
+      }
+      new Chart(document.getElementById('missing-chart'), {
+        type: 'bar', data: { labels: payload.missing.labels, datasets: [{ label: 'Missing values', data: payload.missing.values }] },
+        options: { plugins: { legend: { display: false } } }
+      });
+    }
+  } else {
+    document.getElementById('histogram').replaceWith(document.createTextNode('No numeric columns available for numeric charts.'));
+    document.getElementById('correlation-chart').replaceWith(document.createTextNode('No numeric columns available for correlations.'));
+  }
+}
+loadChartData();
+
+document.querySelectorAll('.save-task').forEach(button => {
+  button.addEventListener('click', async () => {
+    let result = {};
+    try { result = JSON.parse(button.dataset.result); } catch(e) {}
+    const response = await fetch(`/api/session/${sessionId}/task`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ task: button.dataset.task, result })
+    });
+    button.textContent = response.ok ? 'Saved' : 'Could not save';
+    button.disabled = true;
+  });
+});
+</script>
+{% endblock %}
